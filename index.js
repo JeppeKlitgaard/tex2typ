@@ -114,6 +114,69 @@ async function process_csv(csv_name) {
 }
 
 
+async function process_stdin() {
+    let input = '';
+
+    // Read from stdin
+    for await (const chunk of process.stdin) {
+        input += chunk;
+    }
+
+    // Convert and write to stdout
+    try {
+        const result = convert(input.trim());
+        process.stdout.write(result.expr);
+    } catch (err) {
+        console.error('Error converting LaTeX:', err);
+        process.exit(1);
+    }
+}
+
+
+async function process_stdin_json() {
+    let input = '';
+
+    // Read from stdin
+    for await (const chunk of process.stdin) {
+        input += chunk;
+    }
+
+    // Parse JSON array of LaTeX strings
+    try {
+        const latexList = JSON.parse(input.trim());
+
+        if (!Array.isArray(latexList)) {
+            throw new Error('Input must be a JSON array of strings');
+        }
+
+        // Convert each LaTeX string to Typst
+        const typstList = latexList.map((latex, index) => {
+            try {
+                const result = convert(latex.trim());
+                // Check if result exists and has expr property
+                if (!result || typeof result.expr !== 'string') {
+                    return `CONVERT_ERROR: Conversion returned invalid result (index ${index})`;
+                }
+                // Check if result is empty
+                if (result.expr === '') {
+                    return `CONVERT_ERROR: Conversion returned empty string (index ${index})`;
+                }
+                return result.expr;
+            } catch (err) {
+                // Return error message for failed conversions
+                return `CONVERT_ERROR: ${err.message || err.toString()} (index ${index})`;
+            }
+        });
+
+        // Output JSON array
+        process.stdout.write(JSON.stringify(typstList));
+    } catch (err) {
+        console.error('Error processing JSON:', err);
+        process.exit(1);
+    }
+}
+
+
 async function main() {
     const args = process.argv.slice(2);
     const functionName = args[0];
@@ -132,6 +195,10 @@ async function main() {
         } else {
             await process_csv(fileName);
         }
+    } else if (functionName === 'stdin') {
+        await process_stdin();
+    } else if (functionName === 'stdin-json') {
+        await process_stdin_json();
     } else {
         console.log(`Function ${functionName} not found`);
     }
